@@ -1,6 +1,7 @@
 #python version 3.10.11
 #used lib : pandas
 
+#pyinstaller -n "써니픽 정산서 엑셀 제작 프로그램" --clean --onefile main.py
 import pandas as pd
 import shutil
 import os
@@ -30,10 +31,24 @@ class OrderData:
     extra_delivery_fee: int
 
 def get_duration_from_csv():
-    data = pd.read_csv("./setting.csv")
-    start_date = data["시작 날짜"][0]
-    end_date = data["종료 날짜"][0]
 
+    print("예시와 같은 포맷으로 정산 기간을 설정 해주세요.")
+    print("예시 : 2024-03-31")
+    start_date = ""
+    end_date = ""
+    while(True):
+        start_date = input("정산 시작 날짜를 입력 해주세요 : ")
+        if len(start_date) == 10:
+            break
+        else:
+            print("입력 포맷이 잘못되었습니다. 다시 입력 해주세요.")
+    
+    while(True):
+        end_date = input("정산 종료 날짜를 입력 해주세요 : ")
+        if len(end_date) == 10:
+            break
+        else:
+            print("입력 포맷이 잘못되었습니다. 다시 입력 해주세요.")
     return start_date, end_date
 
 def get_spilted_list(org_data):
@@ -58,11 +73,18 @@ def get_spilted_list(org_data):
 def get_input_data(file_path, start_date, end_date):
     order_datas = []
     datas = pd.read_excel(file_path)
+    datas = datas.fillna(0)
     for idx, row in datas.iterrows():
         date = row["날짜"]
         if start_date <= date and date <= end_date:
-            order_data = OrderData(row["날짜"], row["쇼핑몰명"], row["사업자명"], row["브랜드"], row["상품명"][:-5], row["수량"], 
-                row["주문번호"], row["택배사"], row["운송장번호"], row["수취인명"], row["수취인휴대폰"], row["판매가"], row["매출단가"], row["매출총계"], row["결제배송비"], row["추가배송비"])
+            delivery_fee = row["배송비"]
+            extra_delivery_fee = row["추가배송비"]
+            if delivery_fee == "-" or delivery_fee == "":
+                delivery_fee = 0
+            if extra_delivery_fee == "-" or extra_delivery_fee == "":
+                extra_delivery_fee = 0
+            order_data = OrderData(row["날짜"], row["쇼핑몰명"], row["사업자명"], row["브랜드"], row["상품명"], row["수량"], 
+                row["주문번호"], row["택배사"], row["운송장번호"], row["수취인명"], row["수취인 휴대폰"], row["판매가"], row["매출단가"], row["매출총계"], delivery_fee, extra_delivery_fee)
             order_datas.append(order_data)
     order_datas.sort(key=lambda x: x.shop_name)
     return  get_spilted_list(order_datas)
@@ -105,24 +127,6 @@ def get_shop_info(shop_data, date_duration, save_path):
         overview_sheet.cell(row=i+3, column=2).number_format = "#,##0"
     overview_sheet.cell(row=6, column=2).font = Font(color="FF0000", bold=True)
 
-    #상세 주문 정보 입력
-    for i in range(len(shop_data)):
-        #row 2 부터 시작
-        detail_info = [shop_data[i].order_date, shop_data[i].shop_name, shop_data[i].dealer_name, shop_data[i].brand_name, shop_data[i].item_name, shop_data[i].quantity,
-                       shop_data[i].order_num, shop_data[i].delivery_name, str(shop_data[i].delivery_num), shop_data[i].reciever_name, shop_data[i].reciever_phone,
-                       shop_data[i].selling_price, shop_data[i].supply_price, shop_data[i].total_supply_price, shop_data[i].delivery_fee, shop_data[i].extra_delivery_fee]
-        for j in range(len(detail_info)):
-            #엑셀 칸 포맷 변경
-            if j == 0:
-                detail_sheet.cell(row=(i+2), column=(j+1)).number_format = "m월 d일 ;@"
-            if j == 11 or j == 12 or j == 13 or j == 14 or j == 15:
-                detail_sheet.cell(row=(i+2), column=(j+1)).number_format = "#,##0"
-
-            detail_sheet.cell(row=(i+2), column=(j+1)).value = detail_info[j]
-            detail_sheet.cell(row=(i+2), column=(j+1)).border = Border(top=Side(border_style='thin', color='000000'), right=Side(border_style='thin', color='000000'), 
-                                                                       bottom=Side(border_style='thin', color='000000'),left=Side(border_style='thin', color='000000'))
-
-
     brand_data = get_brand_info(shop_data)
 
     last_idx = 9
@@ -149,6 +153,25 @@ def get_shop_info(shop_data, date_duration, save_path):
                     overview_sheet.cell(row=(i+last_idx), column=(j+1)).border = Border(right=Side(border_style='thin', color='000000'), 
                                                                                         bottom=Side(border_style='thin', color='000000'))
         last_idx += len(item_info_list)
+
+    shop_data = sorted(shop_data, key=lambda x : (x.order_date, x.brand_name, x.item_name))
+    #상세 주문 정보 입력
+    for i in range(len(shop_data)):
+        #row 2 부터 시작
+        detail_info = [shop_data[i].order_date, shop_data[i].shop_name, shop_data[i].dealer_name, shop_data[i].brand_name, shop_data[i].item_name, shop_data[i].quantity,
+                       shop_data[i].order_num, shop_data[i].delivery_name, str(shop_data[i].delivery_num), shop_data[i].reciever_name, shop_data[i].reciever_phone,
+                       shop_data[i].selling_price, shop_data[i].supply_price, shop_data[i].total_supply_price, shop_data[i].delivery_fee, shop_data[i].extra_delivery_fee]
+        for j in range(len(detail_info)):
+            #엑셀 칸 포맷 변경
+            if j == 0:
+                detail_sheet.cell(row=(i+2), column=(j+1)).number_format = "m월 d일 ;@"
+            if j == 11 or j == 12 or j == 13 or j == 14 or j == 15:
+                detail_sheet.cell(row=(i+2), column=(j+1)).number_format = "#,##0"
+
+            detail_sheet.cell(row=(i+2), column=(j+1)).value = detail_info[j]
+            detail_sheet.cell(row=(i+2), column=(j+1)).border = Border(top=Side(border_style='thin', color='000000'), right=Side(border_style='thin', color='000000'), 
+                                                                       bottom=Side(border_style='thin', color='000000'),left=Side(border_style='thin', color='000000'))
+
     file_name = f"써니픽 정산서-{shop_data[0].shop_name}_{date_duration}.xlsx"
     print(f"엑셀 파일 \'{file_name}\'을 생성하였습니다!")
     workbook.save(f"{save_path}/{file_name}")
@@ -239,9 +262,16 @@ def get_file_names():
 
 def main():
     os.makedirs(f"./output", exist_ok=True)
-    start_date, end_date = get_duration_from_csv()
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
+    start_date = ""
+    end_date = ""
+    while(True):
+        start_date, end_date = get_duration_from_csv()
+        start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        if start_date > end_date:
+            print("정산 시작 날짜가 정산 종료 날짜보다 늦습니다. 다시 입력해주세요.")
+        else:
+            break
 
     date_duration = start_date.strftime("%Y.%m.%d") + "-" + end_date.strftime("%m.%d")
 
@@ -257,6 +287,7 @@ def main():
 
 if __name__ == "__main__":
     try:
+        print("-써니픽 정산서 제작 프로그램-")
         main()
     except Exception as e:
         print(f"다음과 같은 오류가 발생하여 프로그램을 종료합니다. : {e}")
